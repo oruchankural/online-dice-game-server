@@ -1,9 +1,11 @@
 ﻿const express = require('express');
 const http = require('http');
+
 const {Server} = require('socket.io');
 const cors = require('cors');
 
 const app = express();
+app.use(cors());
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -12,9 +14,11 @@ const io = new Server(server, {
         methods: ["GET", "POST"]
     }
 });
+
 const rooms = {};
 const SIDES = ['one', 'two', 'three', 'four', 'five', 'six'];
-const generateDice = (count) => Array.from({length: count}, () => SIDES[Math.floor(Math.random() * SIDES.length)]);
+const generateDice = (count) =>
+    Array.from({length: count}, () => SIDES[Math.floor(Math.random() * SIDES.length)]);
 const calcTotal = (dice) => dice.reduce((sum, face) => sum + SIDES.indexOf(face) + 1, 0);
 
 io.on('connection', (socket) => {
@@ -45,11 +49,16 @@ io.on('connection', (socket) => {
     socket.on('join_room', ({roomCode, playerName, diceCount}) => {
         const room = rooms[roomCode];
         if (!room) {
+            console.error(`Oda bulunamadı: ${roomCode}`);
             socket.emit('error_message', 'Böyle bir oda bulunamadı!');
             return;
         }
         if (room.isGameStarted) {
             socket.emit('error_message', 'Oyun zaten başladı, katılamazsınız!');
+            return;
+        }
+        if (room.players.some(x => x.name === playerName)) {
+            socket.emit('error_message', 'Bu isim zaten kullanılıyor, başka bir isim seçin!');
             return;
         }
         const newPlayer = {
@@ -77,9 +86,7 @@ io.on('connection', (socket) => {
     socket.on('roll_dice', ({roomCode}) => {
         const room = rooms[roomCode];
         if (!room || room.isGameOver) return;
-
         const currentPlayer = room.players[room.activePlayerIndex];
-
         if (socket.id !== currentPlayer.id) return;
         const newDice = generateDice(currentPlayer.diceCount);
         const total = calcTotal(newDice);
