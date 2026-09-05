@@ -32,6 +32,7 @@ io.on('connection', (socket) => {
             activePlayerIndex: 0,
             isGameStarted: false,
             isGameOver: false,
+            rolls:[],
             players: [
                 {
                     id: socket.id,
@@ -61,10 +62,12 @@ io.on('connection', (socket) => {
             socket.emit('error_message', 'Bu isim zaten kullanılıyor, başka bir isim seçin!');
             return;
         }
+        console.log(`Kullanıcı ${playerName} odaya katıldı: ${roomCode}, zar sayısı: ${diceCount}`);
+
         const newPlayer = {
             id: socket.id,
             name: playerName,
-            diceCount: Number(diceCount) || 4,
+            diceCount: diceCount,
             scores: [],
             totalScore: 0,
             isHost: false
@@ -86,14 +89,25 @@ io.on('connection', (socket) => {
     socket.on('roll_dice', ({roomCode}) => {
         const room = rooms[roomCode];
         if (!room || room.isGameOver) return;
+
         const currentPlayer = room.players[room.activePlayerIndex];
         if (socket.id !== currentPlayer.id) return;
+
         const newDice = generateDice(currentPlayer.diceCount);
         const total = calcTotal(newDice);
         const average = Number((total / newDice.length).toFixed(2));
         currentPlayer.scores.push(average);
         const sumScores = currentPlayer.scores.reduce((a, b) => a + b, 0);
+
         currentPlayer.totalScore = Number((sumScores / currentPlayer.scores.length).toFixed(2));
+        room.rolls.push({
+            playerName: currentPlayer.name,
+            round: room.currentRound,
+            dice: newDice,
+            average
+        });
+
+
         let nextIndex = room.activePlayerIndex + 1;
 
         if (nextIndex < room.players.length) {
@@ -106,13 +120,9 @@ io.on('connection', (socket) => {
                 room.isGameOver = true;
             }
         }
+
         io.to(roomCode).emit('dice_rolled', {
-            room,
-            lastRoll: {
-                playerName: currentPlayer.name,
-                dice: newDice,
-                average
-            }
+            room
         });
     });
 });
